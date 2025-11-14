@@ -1,6 +1,208 @@
 # 優化變更記錄
 
-## 完成的優化 (2024-11-14)
+## 第二輪優化 (2024-11-14) - 效能與穩定性改善
+
+### 🚀 已完成的優化項目
+
+#### 1. ✅ 健康檢查增強
+**改善**: 加入 Redis 連接檢查
+
+**修改前**:
+- 只檢查 PostgreSQL 連接
+- 簡單的 healthy/unhealthy 狀態
+
+**修改後**:
+```javascript
+{
+  "status": "healthy",
+  "checks": {
+    "database": { "status": "ok", "message": "Connected" },
+    "redis": { "status": "ok", "message": "Connected" }
+  }
+}
+```
+
+**影響**:
+- 更完整的健康狀態檢查
+- 能夠識別個別服務的問題
+- 更好的監控和除錯支援
+
+---
+
+#### 2. ✅ 環境變數驗證
+**新增**: 啟動時自動驗證環境變數
+
+**新增檔案**: `src/utils/env-validator.js`
+
+**功能**:
+- 檢查必要環境變數是否存在
+- 驗證變數值的有效性（範圍、格式）
+- 啟動失敗時提供清晰錯誤訊息
+
+**驗證項目**:
+- 必要變數: OPENAI_API_KEY, POSTGRES_*, REDIS_HOST
+- Port 範圍: 1-65535
+- 數值驗證: MAX_FILE_SIZE, JOB_ATTEMPTS
+- 環境類型: development/production/test
+
+**影響**: 防止因配置錯誤導致的運行時問題
+
+---
+
+#### 3. ✅ Graceful Shutdown 改善
+**改善**: 完整的優雅關閉處理
+
+**新增功能**:
+- 停止接受新連接
+- 等待現有請求完成
+- 按順序關閉資源（HTTP → DB → Redis）
+- 30秒超時強制關閉
+- 處理 uncaughtException 和 unhandledRejection
+
+**修改檔案**: `src/server.js`
+
+**影響**:
+- 防止資料遺失
+- 避免連接洩漏
+- 更平滑的服務重啟
+
+---
+
+#### 4. ✅ 檔案流正確關閉
+**問題**: STT 服務中檔案流沒有正確關閉，可能導致記憶體洩漏
+
+**修改**: `src/services/stt.js`
+```javascript
+async function transcribeAudio(filePath, options = {}) {
+  let audioStream = null;
+  try {
+    audioStream = fs.createReadStream(filePath);
+    // ... processing
+  } finally {
+    // 確保流被正確關閉
+    if (audioStream && !audioStream.destroyed) {
+      audioStream.destroy();
+    }
+  }
+}
+```
+
+**影響**:
+- 防止檔案描述符洩漏
+- 減少記憶體使用
+- 提高系統穩定性
+
+---
+
+#### 5. ✅ CORS 配置改善
+**改善**: 更安全的 CORS 設定
+
+**新增環境變數**: `ALLOWED_ORIGINS`
+
+**修改前**:
+```javascript
+app.use(cors()); // 允許所有來源
+```
+
+**修改後**:
+```javascript
+const corsOptions = {
+  origin: (origin, callback) => {
+    const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',')
+      || ['http://localhost:3000'];
+    // 驗證 origin
+  },
+  credentials: true
+};
+app.use(cors(corsOptions));
+```
+
+**影響**:
+- 防止未授權的跨域請求
+- 支援多個允許的來源
+- 開發環境保持靈活性
+
+---
+
+#### 6. ✅ 回應壓縮
+**新增**: gzip 壓縮中介軟體
+
+**新增依賴**: `compression@^1.7.4`
+
+**修改**: `src/server.js`
+```javascript
+app.use(compression()); // 自動壓縮回應
+```
+
+**影響**:
+- 減少網路傳輸量 (通常 70-90%)
+- 加快頁面載入速度
+- 節省頻寬成本
+
+---
+
+### 📦 新增/修改檔案
+
+**新增檔案**:
+- ✅ `src/utils/env-validator.js` - 環境變數驗證工具
+
+**修改檔案**:
+- ✅ `src/server.js` - 健康檢查、CORS、壓縮、優雅關閉
+- ✅ `src/config/index.js` - 整合環境變數驗證
+- ✅ `src/services/stt.js` - 檔案流處理
+- ✅ `package.json` - 加入 compression 依賴
+- ✅ `.env.example` - 加入 ALLOWED_ORIGINS
+
+---
+
+### 🧪 測試建議
+
+#### 測試健康檢查
+```bash
+curl http://localhost:3000/health
+# 應返回 database 和 redis 的狀態
+```
+
+#### 測試環境變數驗證
+```bash
+# 移除必要的環境變數
+unset OPENAI_API_KEY
+npm start
+# 應該立即失敗並顯示清楚的錯誤訊息
+```
+
+#### 測試優雅關閉
+```bash
+# 啟動服務
+npm start
+
+# 在處理請求時發送 SIGTERM
+curl http://localhost:3000/api/jobs &
+kill -SIGTERM <pid>
+
+# 應該看到有序的關閉訊息
+```
+
+#### 測試 CORS
+```bash
+# 從非允許的來源
+curl -H "Origin: http://evil.com" http://localhost:3000/api/jobs
+# 應返回 CORS 錯誤
+
+# 從允許的來源
+curl -H "Origin: http://localhost:3000" http://localhost:3000/api/jobs
+# 應正常返回
+```
+
+#### 測試壓縮
+```bash
+curl -H "Accept-Encoding: gzip" -I http://localhost:3000/api
+# 應包含 Content-Encoding: gzip header
+```
+
+---
+
+## 第一輪優化 (2024-11-14) - 路由與驗證
 
 ### 🔧 已修復的高優先級問題
 

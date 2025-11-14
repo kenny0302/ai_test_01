@@ -1,4 +1,8 @@
 require('dotenv').config();
+const { validateEnvironment } = require('../utils/env-validator');
+
+// Validate environment variables on startup
+validateEnvironment();
 
 const config = {
   // Server configuration
@@ -38,10 +42,5 @@ const config = {
     backoffDelay: parseInt(process.env.JOB_BACKOFF_DELAY || '5000', 10),
   },
 };
-
-// Validate required configuration
-if (!config.openai.apiKey) {
-  console.warn('Warning: OPENAI_API_KEY is not set. Please set it in .env file.');
-}
 
 module.exports = config;

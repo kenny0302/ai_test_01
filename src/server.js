@@ -1,15 +1,38 @@
 const express = require('express');
 const cors = require('cors');
+const compression = require('compression');
 const path = require('path');
 const config = require('./config');
 const jobRoutes = require('./routes/jobs');
 const { pool } = require('./models/database');
 const { getMetrics } = require('./controllers/jobController');
+const { connection: redisConnection } = require('./services/queue');
 
 const app = express();
 
+// CORS configuration
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl)
+    if (!origin) return callback(null, true);
+
+    const allowedOrigins = process.env.ALLOWED_ORIGINS
+      ? process.env.ALLOWED_ORIGINS.split(',')
+      : ['http://localhost:3000'];
+
+    if (allowedOrigins.indexOf(origin) !== -1 || config.nodeEnv === 'development') {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  optionsSuccessStatus: 200,
+};
+
 // Middleware
-app.use(cors());
+app.use(compression()); // Enable gzip compression
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -21,23 +44,41 @@ app.use((req, res, next) => {
 
 // Health check endpoint
 app.get('/health', async (req, res) => {
-  try {
-    // Check database connection
-    await pool.query('SELECT 1');
+  const health = {
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    service: 'speech-to-text-summarizer',
+    version: '1.0.0',
+    checks: {},
+  };
 
-    res.json({
-      status: 'healthy',
-      timestamp: new Date().toISOString(),
-      service: 'speech-to-text-summarizer',
-      version: '1.0.0',
-    });
+  let isHealthy = true;
+
+  // Check database connection
+  try {
+    await pool.query('SELECT 1');
+    health.checks.database = { status: 'ok', message: 'Connected' };
   } catch (error) {
-    res.status(503).json({
-      status: 'unhealthy',
-      timestamp: new Date().toISOString(),
-      error: error.message,
-    });
+    health.checks.database = { status: 'failed', message: error.message };
+    isHealthy = false;
   }
+
+  // Check Redis connection
+  try {
+    await redisConnection.ping();
+    health.checks.redis = { status: 'ok', message: 'Connected' };
+  } catch (error) {
+    health.checks.redis = { status: 'failed', message: error.message };
+    isHealthy = false;
+  }
+
+  // Update overall status
+  if (!isHealthy) {
+    health.status = 'unhealthy';
+  }
+
+  const statusCode = isHealthy ? 200 : 503;
+  res.status(statusCode).json(health);
 });
 
 // API info endpoint
@@ -111,24 +152,66 @@ app.use((error, req, res, next) => {
 // Start server
 const PORT = config.port;
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
   console.log(`Environment: ${config.nodeEnv}`);
   console.log(`Health check: http://localhost:${PORT}/health`);
   console.log(`API info: http://localhost:${PORT}/api`);
 });
 
-// Graceful shutdown
-process.on('SIGTERM', async () => {
-  console.log('SIGTERM received, shutting down gracefully...');
-  await pool.end();
-  process.exit(0);
+// Graceful shutdown handler
+async function gracefulShutdown(signal) {
+  console.log(`${signal} received, shutting down gracefully...`);
+
+  // Stop accepting new connections
+  server.close(async (err) => {
+    if (err) {
+      console.error('Error closing server:', err);
+    } else {
+      console.log('HTTP server closed');
+    }
+
+    // Close database connections
+    try {
+      await pool.end();
+      console.log('Database connections closed');
+    } catch (error) {
+      console.error('Error closing database:', error);
+    }
+
+    // Close Redis connection
+    try {
+      await redisConnection.quit();
+      console.log('Redis connection closed');
+    } catch (error) {
+      console.error('Error closing Redis:', error);
+    }
+
+    console.log('Shutdown complete');
+    process.exit(0);
+  });
+
+  // Force shutdown after 30 seconds
+  setTimeout(() => {
+    console.error('Forced shutdown after timeout');
+    process.exit(1);
+  }, 30000);
+}
+
+// Register shutdown handlers
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+  gracefulShutdown('UNCAUGHT_EXCEPTION');
 });
 
-process.on('SIGINT', async () => {
-  console.log('SIGINT received, shutting down gracefully...');
-  await pool.end();
-  process.exit(0);
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  gracefulShutdown('UNHANDLED_REJECTION');
 });
 
 module.exports = app;

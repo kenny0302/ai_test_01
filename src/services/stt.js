@@ -14,6 +14,8 @@ const openai = new OpenAI({
  * @returns {Promise<string>} - Transcribed text
  */
 async function transcribeAudio(filePath, options = {}) {
+  let audioStream = null;
+
   try {
     console.log(`Starting transcription for file: ${filePath}`);
 
@@ -23,7 +25,13 @@ async function transcribeAudio(filePath, options = {}) {
     }
 
     // Create read stream for the audio file
-    const audioStream = fs.createReadStream(filePath);
+    audioStream = fs.createReadStream(filePath);
+
+    // Handle stream errors
+    audioStream.on('error', (error) => {
+      console.error('Stream error:', error);
+      throw error;
+    });
 
     // Call OpenAI Whisper API
     const response = await openai.audio.transcriptions.create({
@@ -54,6 +62,11 @@ async function transcribeAudio(filePath, options = {}) {
       throw new Error(`File not found: ${filePath}`);
     } else {
       throw new Error(`Transcription failed: ${error.message}`);
+    }
+  } finally {
+    // Ensure stream is properly closed
+    if (audioStream && !audioStream.destroyed) {
+      audioStream.destroy();
     }
   }
 }
