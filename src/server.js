@@ -4,6 +4,7 @@ const path = require('path');
 const config = require('./config');
 const jobRoutes = require('./routes/jobs');
 const { pool } = require('./models/database');
+const { getMetrics } = require('./controllers/jobController');
 
 const app = express();
 
@@ -67,10 +68,22 @@ app.get('/api', (req, res) => {
 // API routes
 app.use('/api/jobs', jobRoutes);
 
+// Queue metrics endpoint
+app.get('/api/queue/metrics', getMetrics);
+
+// 404 handler for API routes
+app.use('/api/*', (req, res) => {
+  res.status(404).json({
+    success: false,
+    error: 'Not found',
+    message: 'The requested API endpoint was not found',
+  });
+});
+
 // Serve frontend (if exists)
 app.use(express.static(path.join(__dirname, '../frontend/public')));
 
-// Catch-all route for frontend
+// Catch-all route for frontend (only non-API routes)
 app.get('*', (req, res) => {
   const indexPath = path.join(__dirname, '../frontend/public/index.html');
   if (require('fs').existsSync(indexPath)) {

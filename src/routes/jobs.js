@@ -8,9 +8,9 @@ const {
   getJobById,
   getAllJobs,
   deleteJob,
-  getMetrics,
 } = require('../controllers/jobController');
 const { streamJobProgress } = require('../controllers/sseController');
+const { validateUUID, validateJobQuery } = require('../utils/validators');
 
 const router = express.Router();
 
@@ -59,31 +59,25 @@ router.post('/', upload.single('audio'), createJob);
  * GET /api/jobs
  * Get all jobs (with optional filters)
  */
-router.get('/', getAllJobs);
+router.get('/', validateJobQuery, getAllJobs);
 
 /**
  * GET /api/jobs/:id/stream
  * Stream job progress using Server-Sent Events (SSE)
  */
-router.get('/:id/stream', streamJobProgress);
+router.get('/:id/stream', validateUUID, streamJobProgress);
 
 /**
  * GET /api/jobs/:id
  * Get a specific job by ID
  */
-router.get('/:id', getJobById);
+router.get('/:id', validateUUID, getJobById);
 
 /**
  * DELETE /api/jobs/:id
  * Delete a job by ID
  */
-router.delete('/:id', deleteJob);
-
-/**
- * GET /api/metrics
- * Get queue metrics
- */
-router.get('/queue/metrics', getMetrics);
+router.delete('/:id', validateUUID, deleteJob);
 
 // Error handling middleware for multer
 router.use((error, req, res, next) => {
