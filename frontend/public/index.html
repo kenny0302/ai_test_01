@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Speech-to-Text Summarizer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .upload-section {
+            text-align: center;
+        }
+
+        .upload-area {
+            border: 3px dashed #667eea;
+            border-radius: 12px;
+            padding: 40px;
+            margin: 20px 0;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .upload-area:hover {
+            background: #f8f9ff;
+            border-color: #764ba2;
+        }
+
+        .upload-area.drag-over {
+            background: #f0f3ff;
+            border-color: #764ba2;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .upload-icon {
+            font-size: 3rem;
+            margin-bottom: 10px;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 6px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .jobs-list {
+            margin-top: 20px;
+        }
+
+        .job-item {
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 15px;
+            transition: all 0.3s;
+        }
+
+        .job-item:hover {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .job-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .job-title {
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+
+        .status-badge {
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .status-pending {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .status-processing {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .status-completed {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .status-failed {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e5e7eb;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s;
+        }
+
+        .job-details {
+            margin-top: 15px;
+        }
+
+        .detail-section {
+            margin: 10px 0;
+        }
+
+        .detail-label {
+            font-weight: 600;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+
+        .detail-content {
+            background: #f9fafb;
+            padding: 10px;
+            border-radius: 6px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .error-message {
+            color: #dc2626;
+            padding: 10px;
+            background: #fef2f2;
+            border-radius: 6px;
+            margin-top: 10px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #6b7280;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #e5e7eb;
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .action-buttons {
+            margin-top: 10px;
+        }
+
+        .action-buttons button {
+            margin-right: 10px;
+            padding: 8px 20px;
+            font-size: 0.9rem;
+        }
+
+        .refresh-btn {
+            background: #10b981;
+        }
+
+        .delete-btn {
+            background: #ef4444;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎙️ Speech-to-Text Summarizer</h1>
+            <p class="subtitle">Upload audio files for automatic transcription and summarization</p>
+        </header>
+
+        <div class="card upload-section">
+            <h2>Upload Audio File</h2>
+            <div class="upload-area" id="uploadArea">
+                <div class="upload-icon">📁</div>
+                <p>Click to select or drag and drop audio file here</p>
+                <p style="color: #6b7280; font-size: 0.9rem; margin-top: 10px;">Supported formats: WAV, MP3 (Max 25MB)</p>
+            </div>
+            <input type="file" id="fileInput" accept="audio/wav,audio/mpeg,audio/mp3">
+            <button id="uploadBtn" disabled>Upload and Process</button>
+            <div id="uploadStatus"></div>
+        </div>
+
+        <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h2>Processing Jobs</h2>
+                <button class="refresh-btn" onclick="loadJobs()">🔄 Refresh</button>
+            </div>
+            <div id="jobsList" class="jobs-list">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading jobs...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+        let selectedFile = null;
+        let eventSources = {};
+
+        // Upload area interactions
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const uploadStatus = document.getElementById('uploadStatus');
+
+        uploadArea.addEventListener('click', () => fileInput.click());
+
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('drag-over');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('drag-over');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('drag-over');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                fileInput.files = files;
+                handleFileSelect();
+            }
+        });
+
+        fileInput.addEventListener('change', handleFileSelect);
+
+        function handleFileSelect() {
+            selectedFile = fileInput.files[0];
+            if (selectedFile) {
+                uploadArea.innerHTML = `
+                    <div class="upload-icon">✅</div>
+                    <p><strong>${selectedFile.name}</strong></p>
+                    <p style="color: #6b7280; font-size: 0.9rem;">${(selectedFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                `;
+                uploadBtn.disabled = false;
+            }
+        }
+
+        uploadBtn.addEventListener('click', async () => {
+            if (!selectedFile) return;
+
+            const formData = new FormData();
+            formData.append('audio', selectedFile);
+
+            uploadBtn.disabled = true;
+            uploadStatus.innerHTML = '<div class="loading"><div class="spinner"></div><p>Uploading...</p></div>';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/jobs`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    uploadStatus.innerHTML = '<p style="color: #10b981; margin-top: 15px;">✅ Upload successful! Processing started...</p>';
+
+                    // Reset upload area
+                    setTimeout(() => {
+                        uploadArea.innerHTML = `
+                            <div class="upload-icon">📁</div>
+                            <p>Click to select or drag and drop audio file here</p>
+                            <p style="color: #6b7280; font-size: 0.9rem; margin-top: 10px;">Supported formats: WAV, MP3 (Max 25MB)</p>
+                        `;
+                        uploadStatus.innerHTML = '';
+                        selectedFile = null;
+                        fileInput.value = '';
+                    }, 2000);
+
+                    // Reload jobs list
+                    loadJobs();
+
+                    // Start SSE for this job
+                    connectToJobStream(result.data.id);
+                } else {
+                    uploadStatus.innerHTML = `<div class="error-message">❌ ${result.error || 'Upload failed'}</div>`;
+                }
+            } catch (error) {
+                uploadStatus.innerHTML = `<div class="error-message">❌ Error: ${error.message}</div>`;
+            } finally {
+                uploadBtn.disabled = false;
+            }
+        });
+
+        // Load jobs
+        async function loadJobs() {
+            const jobsList = document.getElementById('jobsList');
+
+            try {
+                const response = await fetch(`${API_BASE}/api/jobs`);
+                const result = await response.json();
+
+                if (result.success && result.data.length > 0) {
+                    jobsList.innerHTML = result.data.map(job => createJobElement(job)).join('');
+
+                    // Connect to SSE for active jobs
+                    result.data.forEach(job => {
+                        if (job.status === 'pending' || job.status === 'processing') {
+                            connectToJobStream(job.id);
+                        }
+                    });
+                } else {
+                    jobsList.innerHTML = '<p style="text-align: center; color: #6b7280;">No jobs found</p>';
+                }
+            } catch (error) {
+                jobsList.innerHTML = `<div class="error-message">❌ Failed to load jobs: ${error.message}</div>`;
+            }
+        }
+
+        function createJobElement(job) {
+            const statusClass = `status-${job.status}`;
+            const progress = job.progress || 0;
+
+            return `
+                <div class="job-item" id="job-${job.id}">
+                    <div class="job-header">
+                        <div class="job-title">${job.fileName}</div>
+                        <span class="status-badge ${statusClass}">${job.status.toUpperCase()}</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: ${progress}%"></div>
+                    </div>
+                    <p style="font-size: 0.9rem; color: #6b7280;">Progress: ${progress}%</p>
+                    <div class="action-buttons">
+                        <button onclick="viewJobDetails('${job.id}')">📄 View Details</button>
+                        <button class="delete-btn" onclick="deleteJob('${job.id}')">🗑️ Delete</button>
+                    </div>
+                    <div id="details-${job.id}" class="job-details" style="display: none;"></div>
+                </div>
+            `;
+        }
+
+        async function viewJobDetails(jobId) {
+            const detailsDiv = document.getElementById(`details-${jobId}`);
+
+            if (detailsDiv.style.display === 'block') {
+                detailsDiv.style.display = 'none';
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/api/jobs/${jobId}`);
+                const result = await response.json();
+
+                if (result.success) {
+                    const job = result.data;
+                    detailsDiv.innerHTML = `
+                        ${job.transcript ? `
+                            <div class="detail-section">
+                                <div class="detail-label">📝 Transcript:</div>
+                                <div class="detail-content">${job.transcript}</div>
+                            </div>
+                        ` : ''}
+                        ${job.summary ? `
+                            <div class="detail-section">
+                                <div class="detail-label">📋 Summary:</div>
+                                <div class="detail-content">${job.summary}</div>
+                            </div>
+                        ` : ''}
+                        ${job.errorMessage ? `
+                            <div class="error-message">${job.errorMessage}</div>
+                        ` : ''}
+                    `;
+                    detailsDiv.style.display = 'block';
+                }
+            } catch (error) {
+                detailsDiv.innerHTML = `<div class="error-message">❌ Failed to load details: ${error.message}</div>`;
+                detailsDiv.style.display = 'block';
+            }
+        }
+
+        async function deleteJob(jobId) {
+            if (!confirm('Are you sure you want to delete this job?')) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/api/jobs/${jobId}`, {
+                    method: 'DELETE'
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    // Close SSE connection if exists
+                    if (eventSources[jobId]) {
+                        eventSources[jobId].close();
+                        delete eventSources[jobId];
+                    }
+
+                    loadJobs();
+                } else {
+                    alert(`Failed to delete job: ${result.error}`);
+                }
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+            }
+        }
+
+        function connectToJobStream(jobId) {
+            // Close existing connection if any
+            if (eventSources[jobId]) {
+                eventSources[jobId].close();
+            }
+
+            const eventSource = new EventSource(`${API_BASE}/api/jobs/${jobId}/stream`);
+            eventSources[jobId] = eventSource;
+
+            eventSource.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+
+                if (data.type === 'status' || data.type === 'progress') {
+                    updateJobUI(jobId, data);
+                }
+
+                if (data.type === 'done') {
+                    eventSource.close();
+                    delete eventSources[jobId];
+                    loadJobs();
+                }
+            };
+
+            eventSource.onerror = () => {
+                eventSource.close();
+                delete eventSources[jobId];
+            };
+        }
+
+        function updateJobUI(jobId, data) {
+            const jobElement = document.getElementById(`job-${jobId}`);
+            if (!jobElement) return;
+
+            const progressBar = jobElement.querySelector('.progress-fill');
+            const statusBadge = jobElement.querySelector('.status-badge');
+            const progressText = jobElement.querySelector('.progress-bar + p');
+
+            if (progressBar && data.progress !== undefined) {
+                progressBar.style.width = `${data.progress}%`;
+                progressText.textContent = `Progress: ${data.progress}%`;
+            }
+
+            if (statusBadge && data.status) {
+                statusBadge.className = `status-badge status-${data.status}`;
+                statusBadge.textContent = data.status.toUpperCase();
+            }
+        }
+
+        // Load jobs on page load
+        loadJobs();
+
+        // Auto-refresh every 10 seconds
+        setInterval(loadJobs, 10000);
+    </script>
+</body>
+</html>
