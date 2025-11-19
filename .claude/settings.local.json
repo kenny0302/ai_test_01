@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git pull:*)",
+      "Bash(git init:*)",
+      "Bash(git remote add:*)",
+      "Bash(docker-compose restart:*)",
+      "Bash(chmod:*)",
+      "Bash(curl:*)",
+      "Bash(docker-compose ps:*)",
+      "Bash(docker kill:*)",
+      "Bash(docker-compose down:*)",
+      "Bash(docker rm:*)",
+      "Bash(docker stop:*)",
+      "Bash(docker inspect:*)",
+      "Bash(sudo kill:*)",
+      "Bash(lsof:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(docker-compose logs:*)",
+      "Bash(./demo.sh)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
